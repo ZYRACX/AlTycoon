@@ -1,0 +1,6 @@
+# Keep local secrets, dependencies, and generated game data out of Git.
+node_modules/
+.env
+data/
+
+/generated/prisma

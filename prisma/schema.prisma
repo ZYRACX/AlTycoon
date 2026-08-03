@@ -1,0 +1,524 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model buildings {
+  id                                                                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  node_id                                                           String             @unique @db.Uuid
+  company_id                                                        String             @db.Uuid
+  building_type                                                     building_type
+  name                                                              String             @db.VarChar(100)
+  level                                                             Int                @default(1)
+  status                                                            building_status    @default(ACTIVE)
+  created_at                                                        DateTime           @default(now()) @db.Timestamptz(6)
+  companies                                                         companies          @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  nodes                                                             nodes              @relation(fields: [node_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  factory_jobs                                                      factory_jobs[]
+  farm_data                                                         farm_data?
+  marketplaces                                                      marketplaces?
+  mine_data                                                         mine_data?
+  transport_orders_transport_orders_delivery_building_idTobuildings transport_orders[] @relation("transport_orders_delivery_building_idTobuildings")
+  transport_orders_transport_orders_pickup_building_idTobuildings   transport_orders[] @relation("transport_orders_pickup_building_idTobuildings")
+
+  @@index([company_id], map: "idx_buildings_company")
+  @@index([building_type], map: "idx_buildings_type")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model companies {
+  id                                                       String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                                                     String             @unique @db.VarChar(100)
+  balance                                                  Decimal            @default(0) @db.Decimal(18, 2)
+  max_concurrent_road_upgrades                             Int                @default(1)
+  created_at                                               DateTime           @default(now()) @db.Timestamptz(6)
+  buildings                                                buildings[]
+  company_members                                          company_members[]
+  market_orders                                            market_orders[]
+  road_upgrades                                            road_upgrades[]
+  transactions_transactions_receiver_company_idTocompanies transactions[]     @relation("transactions_receiver_company_idTocompanies")
+  transactions_transactions_sender_company_idTocompanies   transactions[]     @relation("transactions_sender_company_idTocompanies")
+  transport_orders                                         transport_orders[]
+  vehicles                                                 vehicles[]
+}
+
+model company_members {
+  company_id String      @db.Uuid
+  player_id  String      @db.Uuid
+  role       member_role
+  joined_at  DateTime    @default(now()) @db.Timestamptz(6)
+  companies  companies   @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  players    players     @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([company_id, player_id])
+  @@index([player_id], map: "idx_company_members_player")
+}
+
+model event_logs {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_type   String    @db.VarChar(100)
+  reference_id String?   @db.Uuid
+  payload      Json?
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([event_type], map: "idx_event_logs")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model factory_jobs {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  building_id String        @db.Uuid
+  recipe_id   String        @db.Uuid
+  status      recipe_status @default(QUEUED)
+  started_at  DateTime?     @db.Timestamptz(6)
+  finishes_at DateTime?     @db.Timestamptz(6)
+  created_at  DateTime      @default(now()) @db.Timestamptz(6)
+  buildings   buildings     @relation(fields: [building_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  recipes     recipes       @relation(fields: [recipe_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([building_id], map: "idx_factory_jobs_building")
+  @@index([status], map: "idx_factory_jobs_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model farm_data {
+  building_id  String    @id @db.Uuid
+  crop_item_id String    @db.Uuid
+  growth_time  Int
+  buildings    buildings @relation(fields: [building_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  items        items     @relation(fields: [crop_item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model inventories {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_type      inventory_owner_type
+  owner_id        String               @db.Uuid
+  max_weight      Decimal?             @db.Decimal(18, 2)
+  max_volume      Decimal?             @db.Decimal(18, 2)
+  created_at      DateTime             @default(now()) @db.Timestamptz(6)
+  inventory_items inventory_items[]
+
+  @@unique([owner_type, owner_id])
+  @@index([owner_type, owner_id], map: "idx_inventory_owner")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model inventory_items {
+  inventory_id String      @db.Uuid
+  item_id      String      @db.Uuid
+  quantity     BigInt      @default(0)
+  inventories  inventories @relation(fields: [inventory_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  items        items       @relation(fields: [item_id], references: [id], onUpdate: NoAction)
+
+  @@id([inventory_id, item_id])
+  @@index([item_id], map: "idx_inventory_items_item")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model items {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                  String                  @unique @db.VarChar(100)
+  category              item_category
+  weight                Decimal                 @db.Decimal(12, 3)
+  volume                Decimal                 @db.Decimal(12, 3)
+  stack_size            Int                     @default(100)
+  base_price            Decimal                 @default(0) @db.Decimal(18, 2)
+  created_at            DateTime                @default(now()) @db.Timestamptz(6)
+  farm_data             farm_data[]
+  inventory_items       inventory_items[]
+  market_orders         market_orders[]
+  mine_data             mine_data[]
+  recipe_inputs         recipe_inputs[]
+  recipe_outputs        recipe_outputs[]
+  transport_order_items transport_order_items[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model market_orders {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketplace_id String       @db.Uuid
+  company_id     String       @db.Uuid
+  item_id        String       @db.Uuid
+  quantity       BigInt
+  price          Decimal      @db.Decimal(18, 2)
+  order_type     order_type
+  created_at     DateTime?    @default(now()) @db.Timestamptz(6)
+  companies      companies    @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items          items        @relation(fields: [item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  marketplaces   marketplaces @relation(fields: [marketplace_id], references: [building_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([company_id], map: "idx_market_company")
+  @@index([item_id], map: "idx_market_item")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model marketplaces {
+  building_id   String          @id @db.Uuid
+  tax_rate      Decimal         @default(0) @db.Decimal(5, 2)
+  market_orders market_orders[]
+  buildings     buildings       @relation(fields: [building_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model mine_data {
+  building_id        String    @id @db.Uuid
+  resource_item_id   String    @db.Uuid
+  production_rate    Decimal   @db.Decimal(18, 2)
+  remaining_resource BigInt
+  buildings          buildings @relation(fields: [building_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  items              items     @relation(fields: [resource_item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model nodes {
+  id                                                       String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  region_id                                                String?               @db.Uuid
+  name                                                     String                @db.VarChar(100)
+  x                                                        Int
+  y                                                        Int
+  created_at                                               DateTime              @default(now()) @db.Timestamptz(6)
+  buildings                                                buildings?
+  regions                                                  regions?              @relation(fields: [region_id], references: [id], onUpdate: NoAction)
+  roads_roads_from_node_idTonodes                          roads[]               @relation("roads_from_node_idTonodes")
+  roads_roads_to_node_idTonodes                            roads[]               @relation("roads_to_node_idTonodes")
+  vehicle_movements_vehicle_movements_from_node_idTonodes  vehicle_movements[]   @relation("vehicle_movements_from_node_idTonodes")
+  vehicle_movements_vehicle_movements_to_node_idTonodes    vehicle_movements[]   @relation("vehicle_movements_to_node_idTonodes")
+  vehicle_route_steps                                      vehicle_route_steps[]
+  vehicle_routes_vehicle_routes_destination_node_idTonodes vehicle_routes[]      @relation("vehicle_routes_destination_node_idTonodes")
+  vehicle_routes_vehicle_routes_origin_node_idTonodes      vehicle_routes[]      @relation("vehicle_routes_origin_node_idTonodes")
+  vehicles                                                 vehicles[]
+
+  @@unique([x, y])
+  @@index([region_id], map: "idx_nodes_region")
+}
+
+model players {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username        String            @unique @db.VarChar(32)
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+  discord_id      String            @unique @db.VarChar(32)
+  company_members company_members[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model recipe_inputs {
+  recipe_id String  @db.Uuid
+  item_id   String  @db.Uuid
+  quantity  BigInt
+  items     items   @relation(fields: [item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  recipes   recipes @relation(fields: [recipe_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([recipe_id, item_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model recipe_outputs {
+  recipe_id String  @db.Uuid
+  item_id   String  @db.Uuid
+  quantity  BigInt
+  items     items   @relation(fields: [item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  recipes   recipes @relation(fields: [recipe_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([recipe_id, item_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model recipes {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String           @unique @db.VarChar(100)
+  production_time Int
+  factory_jobs    factory_jobs[]
+  recipe_inputs   recipe_inputs[]
+  recipe_outputs  recipe_outputs[]
+}
+
+model regions {
+  id    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name  String  @unique @db.VarChar(100)
+  nodes nodes[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model road_upgrade_tiers {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  road_type         road_type
+  level             Int
+  speed_limit_bonus Decimal   @default(0) @db.Decimal(10, 2)
+  upgrade_cost      Decimal   @db.Decimal(18, 2)
+  upgrade_time      Int
+
+  @@unique([road_type, level])
+  @@index([road_type], map: "idx_road_upgrade_tiers_type")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model road_upgrades {
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  road_id     String              @unique(map: "idx_one_active_upgrade_per_road", where: raw("(status = ANY (ARRAY['QUEUED'::road_upgrade_status, 'IN_PROGRESS'::road_upgrade_status]))")) @db.Uuid
+  company_id  String              @db.Uuid
+  from_level  Int
+  to_level    Int
+  status      road_upgrade_status @default(QUEUED)
+  started_at  DateTime?           @db.Timestamptz(6)
+  finishes_at DateTime?           @db.Timestamptz(6)
+  created_at  DateTime            @default(now()) @db.Timestamptz(6)
+  companies   companies           @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  roads       roads               @relation(fields: [road_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([road_id], map: "idx_road_upgrades_road")
+  @@index([status], map: "idx_road_upgrades_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model roads {
+  id                              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  from_node_id                    String         @db.Uuid
+  to_node_id                      String         @db.Uuid
+  distance                        Decimal        @db.Decimal(10, 2)
+  speed_limit                     Decimal        @db.Decimal(10, 2)
+  road_type                       road_type
+  condition                       road_condition @default(GOOD)
+  is_blocked                      Boolean        @default(false)
+  created_at                      DateTime       @default(now()) @db.Timestamptz(6)
+  level                           Int            @default(1)
+  road_upgrades                   road_upgrades?
+  nodes_roads_from_node_idTonodes nodes          @relation("roads_from_node_idTonodes", fields: [from_node_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  nodes_roads_to_node_idTonodes   nodes          @relation("roads_to_node_idTonodes", fields: [to_node_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([from_node_id, to_node_id])
+  @@index([is_blocked], map: "idx_roads_blocked")
+  @@index([from_node_id], map: "idx_roads_from")
+  @@index([to_node_id], map: "idx_roads_to")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model transactions {
+  id                                                    String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sender_company_id                                     String?    @db.Uuid
+  receiver_company_id                                   String?    @db.Uuid
+  amount                                                Decimal    @db.Decimal(18, 2)
+  description                                           String?
+  created_at                                            DateTime?  @default(now()) @db.Timestamptz(6)
+  companies_transactions_receiver_company_idTocompanies companies? @relation("transactions_receiver_company_idTocompanies", fields: [receiver_company_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  companies_transactions_sender_company_idTocompanies   companies? @relation("transactions_sender_company_idTocompanies", fields: [sender_company_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_transactions_created")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model transport_order_items {
+  transport_order_id String           @db.Uuid
+  item_id            String           @db.Uuid
+  quantity           BigInt
+  items              items            @relation(fields: [item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  transport_orders   transport_orders @relation(fields: [transport_order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([transport_order_id, item_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model transport_orders {
+  id                                                         String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id                                                 String                  @db.Uuid
+  pickup_building_id                                         String                  @db.Uuid
+  delivery_building_id                                       String                  @db.Uuid
+  status                                                     transport_order_status  @default(PENDING)
+  created_at                                                 DateTime?               @default(now()) @db.Timestamptz(6)
+  transport_order_items                                      transport_order_items[]
+  companies                                                  companies               @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  buildings_transport_orders_delivery_building_idTobuildings buildings               @relation("transport_orders_delivery_building_idTobuildings", fields: [delivery_building_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  buildings_transport_orders_pickup_building_idTobuildings   buildings               @relation("transport_orders_pickup_building_idTobuildings", fields: [pickup_building_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicle_routes                                             vehicle_routes[]
+
+  @@index([status], map: "idx_transport_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vehicle_movements {
+  id                                          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vehicle_id                                  String          @unique(map: "idx_one_active_movement_per_vehicle", where: raw("(status = 'IN_PROGRESS'::movement_status)")) @db.Uuid
+  from_node_id                                String          @db.Uuid
+  to_node_id                                  String          @db.Uuid
+  started_at                                  DateTime        @db.Timestamptz(6)
+  arrival_time                                DateTime        @db.Timestamptz(6)
+  calculated_speed                            Decimal         @db.Decimal(10, 2)
+  cargo_weight                                Decimal         @db.Decimal(18, 2)
+  status                                      movement_status @default(IN_PROGRESS)
+  nodes_vehicle_movements_from_node_idTonodes nodes           @relation("vehicle_movements_from_node_idTonodes", fields: [from_node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  nodes_vehicle_movements_to_node_idTonodes   nodes           @relation("vehicle_movements_to_node_idTonodes", fields: [to_node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicles                                    vehicles        @relation(fields: [vehicle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vehicle_route_steps {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  route_id          String         @db.Uuid
+  step_order        Int
+  node_id           String         @db.Uuid
+  estimated_arrival DateTime?      @db.Timestamptz(6)
+  nodes             nodes          @relation(fields: [node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicle_routes    vehicle_routes @relation(fields: [route_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([route_id, step_order])
+  @@index([route_id, step_order], map: "idx_route_steps")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vehicle_routes {
+  id                                              String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vehicle_id                                      String                @unique(map: "idx_one_active_route_per_vehicle", where: raw("(status = 'ACTIVE'::vehicle_route_status)")) @db.Uuid
+  transport_order_id                              String?               @db.Uuid
+  origin_node_id                                  String                @db.Uuid
+  destination_node_id                             String                @db.Uuid
+  status                                          vehicle_route_status  @default(ACTIVE)
+  created_at                                      DateTime?             @default(now()) @db.Timestamptz(6)
+  completed_at                                    DateTime?             @db.Timestamptz(6)
+  vehicle_route_steps                             vehicle_route_steps[]
+  nodes_vehicle_routes_destination_node_idTonodes nodes                 @relation("vehicle_routes_destination_node_idTonodes", fields: [destination_node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  nodes_vehicle_routes_origin_node_idTonodes      nodes                 @relation("vehicle_routes_origin_node_idTonodes", fields: [origin_node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  transport_orders                                transport_orders?     @relation(fields: [transport_order_id], references: [id], onUpdate: NoAction)
+  vehicles                                        vehicles              @relation(fields: [vehicle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([vehicle_id], map: "idx_route_vehicle")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vehicle_types {
+  id                String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String     @unique @db.VarChar(100)
+  base_speed        Decimal    @db.Decimal(10, 2)
+  max_weight        Decimal    @db.Decimal(18, 2)
+  max_volume        Decimal    @db.Decimal(18, 2)
+  fuel_capacity     Decimal    @db.Decimal(18, 2)
+  fuel_usage_per_km Decimal    @db.Decimal(18, 4)
+  vehicles          vehicles[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vehicles {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id        String             @db.Uuid
+  vehicle_type_id   String             @db.Uuid
+  current_node_id   String?            @db.Uuid
+  name              String?            @db.VarChar(100)
+  health            Decimal            @default(100) @db.Decimal(5, 2)
+  fuel              Decimal            @default(0) @db.Decimal(18, 2)
+  status            vehicle_status     @default(IDLE)
+  created_at        DateTime?          @default(now()) @db.Timestamptz(6)
+  vehicle_movements vehicle_movements?
+  vehicle_routes    vehicle_routes?
+  companies         companies          @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  nodes             nodes?             @relation(fields: [current_node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicle_types     vehicle_types      @relation(fields: [vehicle_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([company_id], map: "idx_vehicle_company")
+  @@index([status], map: "idx_vehicle_status")
+}
+
+enum building_status {
+  ACTIVE
+  UNDER_CONSTRUCTION
+  DISABLED
+  DESTROYED
+}
+
+enum building_type {
+  MINE
+  FARM
+  WAREHOUSE
+  FACTORY
+  MARKETPLACE
+}
+
+enum inventory_owner_type {
+  PLAYER
+  BUILDING
+  VEHICLE
+}
+
+enum item_category {
+  RAW_RESOURCE
+  MATERIAL
+  PRODUCT
+  FOOD
+  FUEL
+  TOOL
+}
+
+enum member_role {
+  OWNER
+  CEO
+  MANAGER
+  EMPLOYEE
+}
+
+enum movement_status {
+  IN_PROGRESS
+  ARRIVED
+}
+
+enum order_type {
+  BUY
+  SELL
+}
+
+enum recipe_status {
+  QUEUED
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+enum road_condition {
+  GOOD
+  DAMAGED
+  BROKEN
+}
+
+enum road_type {
+  DIRT
+  GRAVEL
+  PAVED
+  HIGHWAY
+}
+
+enum road_upgrade_status {
+  QUEUED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum transport_order_status {
+  PENDING
+  ASSIGNED
+  PICKING_UP
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum vehicle_route_status {
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum vehicle_status {
+  IDLE
+  CALCULATING_ROUTE
+  LOADING
+  MOVING
+  UNLOADING
+  WAITING
+  BROKEN
+  OUT_OF_FUEL
+}
